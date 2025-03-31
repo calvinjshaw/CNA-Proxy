@@ -108,30 +108,74 @@ while True:
   print ('Requested Resource:\t' + resource)
 
   # Check if resource is in cache
+  # UPDATE VERSION
   try:
     cacheLocation = './' + hostname + resource
     if cacheLocation.endswith('/'):
-        cacheLocation = cacheLocation + 'default'
+        cacheLocation += 'default'
 
     print ('Cache location:\t\t' + cacheLocation)
 
     fileExists = os.path.isfile(cacheLocation)
-    
-    # Check wether the file is currently in the cache
-    cacheFile = open(cacheLocation, "r")
-    cacheData = cacheFile.readlines()
 
-    print ('Cache hit! Loading from cache file: ' + cacheLocation)
-    # ProxyServer finds a cache hit
-    # Send back response to client 
-    # ~~~~ INSERT CODE ~~~~
-    for line in cacheData:
-      clientSocket.sendall(line.encode())
-
-    # ~~~~ END CODE INSERT ~~~~
+    # read the file from cache
+    cacheFile = open(cacheLocation, "rb")
+    cacheData = cacheFile.read()
     cacheFile.close()
-    print ('Sent to the client:')
-    print ('> ' + cacheData)
+
+    # ----- BONUS: Check Expires header -----
+    header_end = cacheData.find(b"\r\n\r\n")
+    headers = cacheData[:header_end].decode("utf-8", errors="ignore")
+    # check for date after the "Expires" and try to extract them
+    expires_match = re.search(r"Expires:\s*(.+)", headers) 
+
+    if expires_match:
+        from datetime import datetime
+        from email.utils import parsedate_to_datetime
+        expires_str = expires_match.group(1).strip()
+        try:
+            # Capturing the date and time
+            expires_time = parsedate_to_datetime(expires_str)
+            # Use UTC time as refernce point
+            if datetime.now(datetime.timezone.utc) > expires_time:
+                print("Cached file expired — will fetch a new copy.")
+                raise Exception("Cache expired")
+        except Exception as e:
+            print(f"Could not parse or use Expires header: {e}")
+            raise Exception("Invalid Expires header")
+
+    # If not expired — send from cache
+    print ('Cache hit! Sending cached file to client.')
+    clientSocket.sendall(cacheData)
+    continue  # Done — skip rest of loop
+
+
+
+
+  # try:
+  #   cacheLocation = './' + hostname + resource
+  #   if cacheLocation.endswith('/'):
+  #       cacheLocation = cacheLocation + 'default'
+
+  #   print ('Cache location:\t\t' + cacheLocation)
+
+  #   fileExists = os.path.isfile(cacheLocation)
+    
+  #   # Check wether the file is currently in the cache
+  #   cacheFile = open(cacheLocation, "r")
+  #   cacheData = cacheFile.readlines()
+
+  #   print ('Cache hit! Loading from cache file: ' + cacheLocation)
+  #   # ProxyServer finds a cache hit
+  #   # Send back response to client 
+  #   # ~~~~ INSERT CODE ~~~~
+  #   for line in cacheData:
+  #     clientSocket.sendall(line.encode())
+
+  #   # ~~~~ END CODE INSERT ~~~~
+  #   cacheFile.close()
+  #   print ('Sent to the client:')
+  #   print ('> ' + cacheData)
   except:
     # cache miss.  Get resource from origin server
     originServerSocket = None
